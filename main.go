@@ -128,7 +128,6 @@ func handlerSearch(w http.ResponseWriter, r *http.Request) {
 		ran = val + "km"
 	}
 
-	fmt.Printf( "Search received: %f %f %s", lat, lon, ran)
 
 	// Return a fake post
 	fmt.Printf( "Search received: %f %f %s\n", lat, lon, ran)
