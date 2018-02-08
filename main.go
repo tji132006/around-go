@@ -76,7 +76,7 @@ const (
 	BT_INSTANCE = "around-post"
 
 	// Needs to update this URL if you deploy it to cloud.
-	ES_URL = "http://104.196.0.160:9200"
+	ES_URL = "http://35.231.110.25:9200"
 )
 
 
