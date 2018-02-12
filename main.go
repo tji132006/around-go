@@ -11,10 +11,16 @@ import (
 	elastic "gopkg.in/olivere/elastic.v3"
 	"github.com/pborman/uuid"
 	"strings"
-	"context"
-	"cloud.google.com/go/bigtable"
+	//"context"
+	//"cloud.google.com/go/bigtable"
+
+	"github.com/auth0/go-jwt-middleware"
+	"github.com/dgrijalva/jwt-go"
+	"github.com/gorilla/mux"
+
 
 )
+
 
 type Location struct {
 	Lat float64 `json:"lat"`
@@ -27,6 +33,19 @@ type Post struct {
 	Message  string  `json:"message"`
 	Location Location `json:"location"`
 }
+var mySigningKey = []byte("secret")
+
+const (
+	INDEX = "around"
+	TYPE = "post"
+	DISTANCE = "200km"
+	// Needs to update
+	PROJECT_ID = "possible-stock-194222"
+	BT_INSTANCE = "around-post"
+
+	// Needs to update this URL if you deploy it to cloud.
+	ES_URL = "http://34.211.21.63:9200/"
+)
 
 func main() {
 	// Create a client
@@ -62,26 +81,33 @@ func main() {
 		}
 	}
 	fmt.Println("started-service")
-	http.HandleFunc("/post", handlerPost)
-	http.HandleFunc("/search", handlerSearch)
+	//http.HandleFunc("/post", handlerPost)
+	//http.HandleFunc("/search", handlerSearch)
+	//log.Fatal(http.ListenAndServe(":8080", nil))
+	r := mux.NewRouter()
+
+	var jwtMiddleware = jwtmiddleware.New(jwtmiddleware.Options{
+		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
+			return mySigningKey, nil
+		},
+		SigningMethod: jwt.SigningMethodHS256,
+	})
+
+	r.Handle("/post", jwtMiddleware.Handler(http.HandlerFunc(handlerPost))).Methods("POST")
+	r.Handle("/search", jwtMiddleware.Handler(http.HandlerFunc(handlerSearch))).Methods("GET")
+	r.Handle("/login", http.HandlerFunc(loginHandler)).Methods("POST")
+	r.Handle("/signup", http.HandlerFunc(signupHandler)).Methods("POST")
+
+	http.Handle("/", r)
 	log.Fatal(http.ListenAndServe(":8080", nil))
+
 }
 
-const (
-	INDEX = "around"
-	TYPE = "post"
-	DISTANCE = "200km"
-	// Needs to update
-	PROJECT_ID = "possible-stock-194222"
-	BT_INSTANCE = "around-post"
-
-	// Needs to update this URL if you deploy it to cloud.
-	ES_URL = "http://35.231.110.25:9200"
-)
-
-
-
 func handlerPost(w http.ResponseWriter, r *http.Request) {
+	user := r.Context().Value("user")
+	claims := user.(*jwt.Token).Claims
+	username := claims.(jwt.MapClaims)["username"]
+
 	// Parse from body of request to get a json object.
 	fmt.Println("Received one post request")
 	decoder := json.NewDecoder(r.Body)
@@ -90,38 +116,38 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 		return
 	}
-
+	p.User = username.(string)
 	id := uuid.New()
 	// Save to ES.
 	saveToES(&p, id)
 
 	//Save to BigTable
 
-	ctx := context.Background()
-	// you must update project name here
-	bt_client, err := bigtable.NewClient(ctx, PROJECT_ID, BT_INSTANCE)
-	if err != nil {
-		panic(err)
-		return
-	}
-
-	// TODO (student questions) save Post into BT as well
-
-	tbl := bt_client.Open("post")
-	mut := bigtable.NewMutation()
-	t := bigtable.Now()
-
-	mut.Set("post", "user", t, []byte(p.User))
-	mut.Set("post", "message", t, []byte(p.Message))
-	mut.Set("location", "lat", t, []byte(strconv.FormatFloat(p.Location.Lat, 'f', -1, 64)))
-	mut.Set("location", "lon", t, []byte(strconv.FormatFloat(p.Location.Lon, 'f', -1, 64)))
-
-	err = tbl.Apply(ctx, id, mut)
-	if err != nil {
-		panic(err)
-		return
-	}
-	fmt.Printf("Post is saved to BigTable: %s\n", p.Message)
+	//ctx := context.Background()
+	//// you must update project name here
+	//bt_client, err := bigtable.NewClient(ctx, PROJECT_ID, BT_INSTANCE)
+	//if err != nil {
+	//	panic(err)
+	//	return
+	//}
+	//
+	//// TODO (student questions) save Post into BT as well
+	//
+	//tbl := bt_client.Open("post")
+	//mut := bigtable.NewMutation()
+	//t := bigtable.Now()
+	//
+	//mut.Set("post", "user", t, []byte(p.User))
+	//mut.Set("post", "message", t, []byte(p.Message))
+	//mut.Set("location", "lat", t, []byte(strconv.FormatFloat(p.Location.Lat, 'f', -1, 64)))
+	//mut.Set("location", "lon", t, []byte(strconv.FormatFloat(p.Location.Lon, 'f', -1, 64)))
+	//
+	//err = tbl.Apply(ctx, id, mut)
+	//if err != nil {
+	//	panic(err)
+	//	return
+	//}
+	//fmt.Printf("Post is saved to BigTable: %s\n", p.Message)
 
 }
 
